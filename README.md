@@ -87,4 +87,136 @@ To test if chaos toolkit is installed
 # chaos version
 ```
 
+## Experimenting kubernetes
 
+Before starting our experiments, we have to deploy a chaostoolkit driver called 'chaostoolkit-kubernetes'
+
+```
+# cd ~/venvs/chaostk && ./bin/pip3 install -U chaostoolkit-kubernetes
+```
+
+To list all the tasks that this plugin can perform, we will use the 'discover' option
+
+```
+# chaos discover chaostoolkit-kubernetes
+```
+
+Or reffer to the following link:
+
+[chaostoolkit-kubernetes Docuentation](https://docs.chaostoolkit.org/drivers/kubernetes/)
+
+#### Testing Controllers
+
+* First of all, we will test if our application is deployed using kubernetes controllers by terminating application instances
+
+Note: Before running our experiment, we have to define the steady state of our application
+
+In the following experiment, we have six sections:
+
+* Version: Current version of chaostoolkit API 
+* Title: Title of our experiment
+* Description: Description of our experiment
+* Tags: Used to organize experiments
+* Steady-state-hypothesis: The state of our application, in this case, we are checking wether a pod exists or no
+* Method: In the method section, we will terminate a random pod that has 'app=demo' label, and we will pause the expermient before checking wether the pod exists or no  
+
+```
+version: 1.0.0
+title: What happens if we terminate a Pod?
+description: If a Pod is terminated, a new one should be created in its places.
+tags:
+- k8s
+- pod
+steady-state-hypothesis:
+  title: Pod exists
+  probes:
+  - name: pod-exists
+    type: probe
+    tolerance: 1
+    provider:
+      type: python
+      func: count_pods
+      module: chaosk8s.pod.probes
+      arguments:
+        label_selector: app=demo
+        ns: demo
+method:
+- type: action
+  name: terminate-pod
+  provider:
+    type: python
+    module: chaosk8s.pod.actions
+    func: terminate_pods
+    arguments:
+      label_selector: app=demo
+      rand: true
+      ns: demo
+  pauses: 
+    after: 10
+```
+
+- In all our examples, we will be using a demo called app, in a namespace called demo
+
+- If the experiment fails, we have to use a controller to deploy our applications, kubernetes deployments is the ultimate solution to keep our application in an existing status.
+
+- Checking wheter a pod exists or no is not enough in kubernetes, as you know, a pod may exists, and not be in a running state, so we will push our experiment further, and we will check if the pods are in a 'Running' state.
+
+```
+version: 1.0.0
+title: What happens if we terminate a Pod?
+description: If a Pod is terminated, a new one should be created in its places.
+tags:
+- k8s
+- pod
+steady-state-hypothesis:
+  title: Pod exists
+  probes:
+  - name: pod-exists
+    type: probe
+    tolerance: 1
+    provider:
+      type: python
+      func: count_pods
+      module: chaosk8s.pod.probes
+      arguments:
+        label_selector: app=demo
+        ns: demo
+  - name: pod-in-phase
+    type: probe
+    tolerance: true
+    provider:
+      type: python
+      func: pods_in_phase
+      module: chaosk8s.pod.probes
+      arguments:
+        label_selector: app=demo
+        ns: demo
+        phase: Running
+  - name: pod-in-conditions
+    type: probe
+    tolerance: true
+    provider:
+      type: python
+      func: pods_in_conditions
+      module: chaosk8s.pod.probes
+      arguments:
+        label_selector: app=demo
+        ns: demo
+        conditions:
+        - type: Ready
+          status: "True"
+method:
+- type: action
+  name: terminate-pod
+  provider:
+    type: python
+    module: chaosk8s.pod.actions
+    func: terminate_pods
+    arguments:
+      label_selector: app=demo
+      rand: true
+      ns: demo
+  pauses: 
+    after: 10
+
+```
